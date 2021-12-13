@@ -1,12 +1,19 @@
 import argparse
 
+import mysql.connector
+from mysql.connector import Error
+from sqlalchemy.orm import sessionmaker, relationship
 import select
 import socket
-import sys
+import sys, os
 import json
 import logging
+import pymysql
 import time
 
+from sqlalchemy import Column, create_engine, MetaData, Table, String, Integer, TupleType, DateTime, ForeignKey
+from sqlalchemy.orm import declarative_base
+from datetime import datetime
 import logs.server_log_config
 from common.variables import ACTION, ACCOUNT_NAME, RESPONSE, MAX_CONNECTIONS, \
     PRESENCE, TIME, USER, ERROR, DEFAULT_PORT, MESSAGE, MESSAGE_TEXT, SENDER, DESTINATION, RESPONSE_400, EXIT
@@ -14,6 +21,23 @@ from common.utils import get_message, send_message
 from decos import ServerDecorate
 
 SERVER_LOGGER = logging.getLogger('server')
+Base = declarative_base()
+
+
+class User(Base):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    login = Column(String, unique=True, nullable=False)
+    info = Column(String)
+    password = Column(String, nullable=False)
+    history = relationship('History', cascade='all, delete-orphan')
+
+
+class History(Base):
+    __tablename__ = 'history'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(DateTime, default=datetime.now, comment='Дата входа')
+    user_id = Column(Integer, ForeignKey('users.id'))
 
 
 def process_message(message, names, listen_socks):
@@ -76,7 +100,7 @@ def main():
     transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     transport.bind((listen_address, listen_port))
     transport.settimeout(0.5)
-
+    val = []
     clients = []
     messages = []
 
@@ -86,6 +110,8 @@ def main():
     while True:
         try:
             client, client_address = transport.accept()
+            val.append(client)
+            val.append(client_address)
         except OSError:
             pass
         else:
@@ -94,6 +120,7 @@ def main():
         recv_data_lst = []
         send_data_lst = []
         err_lst = []
+
         try:
             if clients:
                 recv_data_lst, send_data_lst, err_lst = select.select(clients, clients, [], 0)
@@ -104,19 +131,36 @@ def main():
                 try:
                     process_client_message(get_message(client_with_message), messages, client_with_message, clients,
                                            names)
-
                 except Exception:
                     clients.remove(client_with_message)
         for i in messages:
             try:
+
+                sql = "INSERT INTO users (ip, name, time, inf) VALUES ( %s, %s )"
+                val.append(i)
+
+                cursor = connection.cursor()
+                cursor.executemany(sql, val)
+                connection.commit()
                 process_message(i, names, send_data_lst)
             except Exception:
                 no_user_dict = RESPONSE_400
-                no_user_dict[ERROR] = f'Полюзователь {i[DESTINATION]} отключился от сервера'
+                no_user_dict[ERROR] = f'Пользователь {i[DESTINATION]} отключился от сервера'
                 send_message(names[i[SENDER]], no_user_dict)
                 del names[i[DESTINATION]]
         messages.clear()
 
 
 if __name__ == '__main__':
+    import uvicorn
+
+    os.environ['QT_DEBUG_PLUGINS'] = '1'
+    os.environ[
+        'QT_PLUGIN_PATH'] = "D:\\GeekBrains\\Базы данных и PyQT\\4\\.venv\\Lib\\site-packages\\PyQt5\\Qt5\\plugins"
+    uvicorn.run(
+        "main:Project",
+        host=os.getenv("APP_HOST", "127.0.0.1"),
+        port=int(os.getenv("APP_PORT", "52005")),
+        reload=True
+    )
     main()
