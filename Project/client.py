@@ -15,6 +15,7 @@ from errors import ReqFieldMissingError, ServerError, IncorrectDataRecivedError
 CLIENT_LOGGER = logging.getLogger('client')
 
 
+@ClientDecorate()
 def create_exit_message(usernam):
     sys.exit(1)
 
@@ -59,7 +60,8 @@ def create_message(sock, account_name='Guest'):
         sys.exit(1)
 
 
-def user_intaractive(sock, username):
+@ClientDecorate()
+def user_interactive(sock, username):
     print_help()
     while True:
         command = input('Введите команду: ')
@@ -90,10 +92,11 @@ def create_presence(account_name='Guest'):
     return out
 
 
+@ClientDecorate()
 def print_help():
     print('Поддерживаемые команды: ')
     print('message - отправить сообщение')
-    print('help - вывусти подсказки по командам')
+    print('help - вывести подсказки по командам')
     print('exit - выход из программы')
 
 
@@ -159,7 +162,7 @@ def main():
         receiver = threading.Thread(target=message_form_server, args=(transport, client_name))
         receiver.daemon = True
         receiver.start()
-        user_interface = threading.Thread(target=user_intaractive, args=(transport, client_name))
+        user_interface = threading.Thread(target=user_interactive, args=(transport, client_name))
         user_interface.daemon = True
         user_interface.start()
         while True:
