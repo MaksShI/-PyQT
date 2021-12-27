@@ -5,9 +5,12 @@ import socket
 import threading
 import time
 import logging
+from chardet import detect
+import hashlib
+import yaml
 import logs.client_log_config
 from common.variables import ACTION, PRESENCE, TIME, USER, ACCOUNT_NAME, \
-    RESPONSE, ERROR, DEFAULT_IP_ADDRESS, DEFAULT_PORT, MESSAGE, MESSAGE_TEXT, SENDER, DESTINATION
+    RESPONSE, ERROR, DEFAULT_IP_ADDRESS, DEFAULT_PORT, MESSAGE, MESSAGE_TEXT, SENDER, DESTINATION, SALT
 from common.utils import get_message, send_message
 from decos import ClientDecorate
 from errors import ReqFieldMissingError, ServerError, IncorrectDataRecivedError
@@ -76,6 +79,11 @@ def user_intaractive(sock, username):
             print('Команда не распознана, попробуйте снова.')
 
 
+def password_is_valid(password):
+    hash_object = hashlib.sha256(SALT.encode() + password.encode()).hexdigest()
+    return hash_object
+
+
 @ClientDecorate()
 def create_presence(account_name='Guest'):
     # {'action': 'presence', 'time': 1573760672.167031, 'user': {'account_name': 'Guest'}}
@@ -88,6 +96,12 @@ def create_presence(account_name='Guest'):
     }
     CLIENT_LOGGER.debug(f'создано сообщение{out}')
     return out
+
+def registered():
+    name = input('Придумайте имя пользователя: ')
+    password = input('Придумайте пароль: ')
+    password = password_is_valid(password)
+    return name, password
 
 
 def print_help():
@@ -136,16 +150,30 @@ def arg_parser():
     return server_address, server_port, client_name
 
 
+
 def main():
-    # client.py 192.168.1.56 8079
+    # client.py 192.168.1.56 807
+    with open('client.yaml', 'r', encoding='utf-8') as f_n:
+        client_db = yaml.load(f_n, Loader=yaml.FullLoader)
+
     server_address, server_port, client_name = arg_parser()
-    if not client_name:
-        client_name = input('Введите имя пользователя: ')
     try:
-        transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        transport.connect((server_address, server_port))
-        send_message(transport, create_presence(client_name))
-        answer = process_response_ans(get_message(transport))
+        count = input('Желаете ли вы создать новый аккаунт(если у вас уже имееться аккаунт - просто пропустите это сообщение): ')
+        if count != '':
+            key, _KT = registered()
+            client_db[key] = f'{_KT}'
+            with open('client.yaml', 'w', encoding='utf-8') as f_n:
+                yaml.dump(client_db, f_n)
+        client_name = input('Введите имя пользователя: ')
+        password = input('Введите ваш пароль: ')
+        password = password_is_valid(password)
+        if client_db[f'{client_name}'] == f'{password}':
+            transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            transport.connect((server_address, server_port))
+            send_message(transport, create_presence(client_name))
+            answer = process_response_ans(get_message(transport))
+        else:
+            raise ServerError
     except json.JSONDecodeError:
         sys.exit(1)
     except ServerError as error:

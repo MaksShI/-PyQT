@@ -4,6 +4,7 @@ MAX_CONNECTIONS = 5
 MAX_PACKAGE_LENGTH = 1024
 ENCODING = 'utf-8'
 DESTINATION = 'destination'
+SALT = 'pt attempt again'
 RESPONSE_400 = {'response': 200}
 
 ACTION = 'action'
