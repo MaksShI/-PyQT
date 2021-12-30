@@ -1,3 +1,5 @@
+"""Программа-сервер"""
+
 import argparse
 
 import select
@@ -13,10 +15,20 @@ from common.variables import ACTION, ACCOUNT_NAME, RESPONSE, MAX_CONNECTIONS, \
 from common.utils import get_message, send_message
 from decos import ServerDecorate
 
+
+# Инициализация логирования сервера.
 SERVER_LOGGER = logging.getLogger('server')
 
 
 def process_message(message, names, listen_socks):
+    """
+    Функция адресной отправки сообщения определённому клиенту. Принимает словарь сообщение,
+    список зарегистрированых пользователей и слушающие сокеты. Ничего не возвращает.
+    :param message:
+    :param names:
+    :param listen_socks:
+    :return:
+    """
     if message[DESTINATION] in names and names[message[DESTINATION]] in listen_socks:
         send_message(names[message[DESTINATION]], message)
     elif message[DESTINATION] in names and names[message[DESTINATION]] not in listen_socks:
@@ -27,6 +39,16 @@ def process_message(message, names, listen_socks):
 
 @ServerDecorate()
 def process_client_message(message, messages_list, client, clients, names):
+    """
+    Обработчик сообщений от клиентов, принимает словарь - сообщение от клиента,
+    проверяет корректность, отправляет словарь-ответ в случае необходимости.
+    :param message:
+    :param messages_list:
+    :param client:
+    :param clients:
+    :param names:
+    :return:
+    """
     if ACTION in message and message[ACTION] == PRESENCE and TIME in message \
             and USER in message:
         if message[USER][ACCOUNT_NAME] not in names.keys():
@@ -58,6 +80,7 @@ def process_client_message(message, messages_list, client, clients, names):
 
 @ServerDecorate()
 def arg_parser():
+    """Парсер аргументов коммандной строки"""
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', default=DEFAULT_PORT, type=int, nargs='?')
     parser.add_argument('-a', default='', nargs='?')
@@ -72,6 +95,10 @@ def arg_parser():
 
 
 def main():
+    """
+    Загрузка параметров командной строки, если нет параметров, то задаём значения по умоланию
+    :return:
+    """
     listen_address, listen_port = arg_parser()
     transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     transport.bind((listen_address, listen_port))

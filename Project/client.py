@@ -1,3 +1,5 @@
+"""Программа-клиент"""
+
 import argparse
 import sys
 import json
@@ -5,22 +7,29 @@ import socket
 import threading
 import time
 import logging
+from chardet import detect
+import hashlib
+import yaml
 import logs.client_log_config
 from common.variables import ACTION, PRESENCE, TIME, USER, ACCOUNT_NAME, \
-    RESPONSE, ERROR, DEFAULT_IP_ADDRESS, DEFAULT_PORT, MESSAGE, MESSAGE_TEXT, SENDER, DESTINATION
+    RESPONSE, ERROR, DEFAULT_IP_ADDRESS, DEFAULT_PORT, MESSAGE, MESSAGE_TEXT, SENDER, DESTINATION, SALT
 from common.utils import get_message, send_message
 from decos import ClientDecorate
 from errors import ReqFieldMissingError, ServerError, IncorrectDataRecivedError
 
+
+# Инициализация клиентского логера
 CLIENT_LOGGER = logging.getLogger('client')
 
 
 def create_exit_message(usernam):
+    """Функция создаёт словарь с сообщением о выходе"""
     sys.exit(1)
 
 
 @ClientDecorate()
 def message_form_server(sock, my_username):
+    """Функция - обработчик сообщений других пользователей, поступающих с сервера"""
     while True:
         try:
             message = get_message(sock)
@@ -43,6 +52,13 @@ def message_form_server(sock, my_username):
 
 @ClientDecorate()
 def create_message(sock, account_name='Guest'):
+    """
+       Функция запрашивает кому отправить сообщение и само сообщение,
+       и отправляет полученные данные на сервер
+       :param sock:
+       :param account_name:
+       :return:
+       """
     to_user = input('Введите получателя для отправки: ')
     message = input('Введите сообщение или "quit" для завершения: ')
     message_dict = {
@@ -60,6 +76,7 @@ def create_message(sock, account_name='Guest'):
 
 
 def user_intaractive(sock, username):
+    """Функция взаимодействия с пользователем, запрашивает команды, отправляет сообщения"""
     print_help()
     while True:
         command = input('Введите команду: ')
@@ -76,8 +93,15 @@ def user_intaractive(sock, username):
             print('Команда не распознана, попробуйте снова.')
 
 
+def password_is_valid(password):
+    '''Преобразует пароль в md5'''
+    hash_object = hashlib.sha256(SALT.encode() + password.encode()).hexdigest()
+    return hash_object
+
+
 @ClientDecorate()
 def create_presence(account_name='Guest'):
+    """Функция генерирует запрос о присутствии клиента"""
     # {'action': 'presence', 'time': 1573760672.167031, 'user': {'account_name': 'Guest'}}
     out = {
         ACTION: PRESENCE,
@@ -89,8 +113,16 @@ def create_presence(account_name='Guest'):
     CLIENT_LOGGER.debug(f'создано сообщение{out}')
     return out
 
+def registered():
+    '''Регистрация нового пеользователя'''
+    name = input('Придумайте имя пользователя: ')
+    password = input('Придумайте пароль: ')
+    password = password_is_valid(password)
+    return name, password
+
 
 def print_help():
+    """Функция выводящяя справку по использованию"""
     print('Поддерживаемые команды: ')
     print('message - отправить сообщение')
     print('help - вывусти подсказки по командам')
@@ -110,6 +142,12 @@ def process_ans(message):
 
 @ClientDecorate()
 def process_response_ans(message):
+    """
+    Функция разбирает ответ сервера на сообщение о присутствии,
+    возращает 200 если все ОК или генерирует исключение при ошибке
+    :param message:
+    :return:
+    """
     CLIENT_LOGGER.debug(f'Разбор приветственного сообщения от сервера {message}')
     if RESPONSE in message:
         if message[RESPONSE] == 200:
@@ -121,6 +159,7 @@ def process_response_ans(message):
 
 @ClientDecorate()
 def arg_parser():
+    """Парсер аргументов коммандной строки"""
     arguments = argparse.ArgumentParser()
     arguments.add_argument('addr', default=DEFAULT_IP_ADDRESS, nargs='?')
     arguments.add_argument('port', default=DEFAULT_PORT, type=int, nargs='?')
@@ -136,16 +175,31 @@ def arg_parser():
     return server_address, server_port, client_name
 
 
+
 def main():
-    # client.py 192.168.1.56 8079
+    """Сообщаем о запуске"""
+    # client.py 192.168.1.56 807
+    with open('client.yaml', 'r', encoding='utf-8') as f_n:
+        client_db = yaml.load(f_n, Loader=yaml.FullLoader)
+
     server_address, server_port, client_name = arg_parser()
-    if not client_name:
-        client_name = input('Введите имя пользователя: ')
     try:
-        transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        transport.connect((server_address, server_port))
-        send_message(transport, create_presence(client_name))
-        answer = process_response_ans(get_message(transport))
+        count = input('Желаете ли вы создать новый аккаунт(если у вас уже имееться аккаунт - просто пропустите это сообщение): ')
+        if count != '':
+            key, _KT = registered()
+            client_db[key] = f'{_KT}'
+            with open('client.yaml', 'w', encoding='utf-8') as f_n:
+                yaml.dump(client_db, f_n)
+        client_name = input('Введите имя пользователя: ')
+        password = input('Введите ваш пароль: ')
+        password = password_is_valid(password)
+        if client_db[f'{client_name}'] == f'{password}':
+            transport = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            transport.connect((server_address, server_port))
+            send_message(transport, create_presence(client_name))
+            answer = process_response_ans(get_message(transport))
+        else:
+            raise ServerError
     except json.JSONDecodeError:
         sys.exit(1)
     except ServerError as error:
