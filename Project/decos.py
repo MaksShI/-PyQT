@@ -11,6 +11,10 @@ import logs.server_log_config
 SERVER_LOGGER = logging.getLogger('server')
 CLIENT_LOGGER = logging.getLogger('client')
 
+# метод определения модуля, источника запуска.
+# Метод find () возвращает индекс первого вхождения искомой подстроки,
+# если он найден в данной строке.
+# Если его не найдено, - возвращает -1.
 
 class ClientDecorate:
     def __call__(self, func):

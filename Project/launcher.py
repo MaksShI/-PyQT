@@ -1,3 +1,5 @@
+"""Программа-лаунчер"""
+
 import subprocess
 
 PROCESS = []
